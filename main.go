@@ -2,6 +2,8 @@ package main
 
 import (
 	"bufio"
+	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -12,8 +14,16 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"gopkg.in/yaml.v2"
 )
 
+type Config struct {
+	Access_log_path string `yaml:"access_log_path"`
+	Port            string `yaml:"port"`
+	Log_format      string `yaml:"log_format"`
+}
+
+var config Config
 var requests = prometheus.NewCounterVec(
 	prometheus.CounterOpts{
 		Name: "requests",
@@ -23,9 +33,11 @@ var requests = prometheus.NewCounterVec(
 	},
 )
 
-func nginx_parser() {
+func nginx_parser(path string, log_format string) {
+	//path := config.access_log_path
+	//log_format := config.log_format
 	requests.Reset()
-	f, err := os.Open("/var/log/nginx/access.log")
+	f, err := os.Open(path)
 
 	if err != nil {
 		log.Fatal(err)
@@ -34,7 +46,7 @@ func nginx_parser() {
 	defer f.Close()
 
 	scanner := bufio.NewScanner(f)
-	logsFormat := `$ip_address - \[$time_stamp\] \"$http_method $request_path $_\" $response_code $response_size $http_host $http_user_agent \($http_x_forwarded_for\) $_ $browser - $request_time_spent $upstream_response_time $request_date`
+	logsFormat := log_format
 	regexFormat := regexp.MustCompile(`\$([\w_]*)`).ReplaceAllString(logsFormat, `(?P<$1>.*)`)
 
 	re := regexp.MustCompile(regexFormat)
@@ -66,6 +78,14 @@ func nginx_parser() {
 
 }
 func main() {
+	data, err := ioutil.ReadFile("config.yaml")
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
+
+	errr := yaml.Unmarshal(data, &config)
+	fmt.Println(errr)
 	reg := prometheus.NewRegistry()
 	reg.Register(requests)
 	router := mux.NewRouter()
@@ -76,13 +96,13 @@ func main() {
 		for {
 			select {
 			case <-ticker.C:
-				nginx_parser()
+				nginx_parser(config.Access_log_path, config.Log_format)
 			case <-quit:
 				ticker.Stop()
 				return
 			}
 		}
 	}()
-	err := http.ListenAndServe(":5000", router)
+	err = http.ListenAndServe(":"+config.Port, router)
 	log.Fatal(err)
 }

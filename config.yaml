@@ -1,0 +1,3 @@
+access_log_path: "/var/log/nginx/access.log"
+port: "5050"
+log_format: '$ip_address - \[$time_stamp\] \"$http_method $request_path $_\" $response_code $response_size $http_host $http_user_agent \($http_x_forwarded_for\) $_ $browser - $request_time_spent $upstream_response_time $request_date'
